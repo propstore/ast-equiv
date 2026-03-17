@@ -87,7 +87,7 @@ def db_array(values):
             "values": "amplitude_array",
             "v": "current_amplitude",
         },
-        "expected_equivalent": False,
+        "expected_equivalent": True,
         "expected_min_tier": 2,
         "known_values": {},
     },

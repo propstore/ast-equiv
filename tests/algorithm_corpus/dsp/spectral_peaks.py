@@ -37,7 +37,7 @@ def detect_spectral_peaks(mag, min_sep):
             "min_sep": "minimum_peak_separation",
             "found": "peak_indices",
         },
-        "expected_equivalent": False,
+        "expected_equivalent": True,
         "expected_min_tier": 2,
         "known_values": {},
     },

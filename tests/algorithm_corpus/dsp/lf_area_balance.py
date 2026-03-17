@@ -137,7 +137,7 @@ def find_alpha_nr(omega, t_exc, exc_amp, decay, ret_tau, guess, tolerance, limit
             "limit": "max_iterations",
             "alpha": "lf_growth_constant",
         },
-        "expected_equivalent": False,
+        "expected_equivalent": True,
         "expected_min_tier": 2,
         "known_values": {},
     },
