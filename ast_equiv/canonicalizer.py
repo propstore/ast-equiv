@@ -83,6 +83,92 @@ class ConceptNormalizer(ast.NodeTransformer):
         return node
 
 
+class _NameCollector(ast.NodeVisitor):
+    """Collect variable names in order of first appearance."""
+
+    def __init__(self):
+        self.seen: set[str] = set()
+        self.order: list[str] = []
+        # Names used as attribute roots (e.g. math in math.pi) but never assigned
+        self._attr_only_names: set[str] = set()
+
+    def _record(self, name: str) -> None:
+        if name not in self.seen and name not in KNOWN_BUILTINS and name not in self._attr_only_names:
+            self.seen.add(name)
+            self.order.append(name)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        # Pre-scan: find names used as attribute roots that are never assigned.
+        # These are module-like names (e.g. math, os) that should not be renamed.
+        attr_roots: set[str] = set()
+        assigned_names: set[str] = set()
+        param_names = {a.arg for a in (node.args.args or [])}
+        for child in ast.walk(node):
+            if isinstance(child, ast.Attribute):
+                root = child
+                while isinstance(root, ast.Attribute):
+                    root = root.value
+                if isinstance(root, ast.Name):
+                    attr_roots.add(root.id)
+            if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store):
+                assigned_names.add(child.id)
+        # Only exclude names that are attribute roots but never assigned and not params
+        self._attr_only_names = attr_roots - assigned_names - param_names
+
+        # Parameters first, in declaration order
+        for arg_node in (node.args.args or []):
+            self._record(arg_node.arg)
+        # Then walk body for locals
+        for child in node.body:
+            self.visit(child)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        self._record(node.id)
+        self.generic_visit(node)
+
+    def visit_arg(self, node: ast.arg) -> None:
+        self._record(node.arg)
+        self.generic_visit(node)
+
+
+class PositionalRenamer(ast.NodeTransformer):
+    """Rename all variables by position-of-first-use.
+
+    Each side of a comparison gets its own positional mapping so that
+    different variable names map to the same canonical names (_v0, _v1, ...).
+    """
+
+    def __init__(self):
+        self.mapping: dict[str, str] = {}
+
+    @classmethod
+    def rename(cls, tree: ast.Module) -> ast.Module:
+        """Build positional mapping and apply to tree."""
+        collector = _NameCollector()
+        collector.visit(tree)
+        mapping = {name: f"_v{i}" for i, name in enumerate(collector.order)}
+        renamer = cls()
+        renamer.mapping = mapping
+        tree = renamer.visit(tree)
+        ast.fix_missing_locations(tree)
+        return tree
+
+    def visit_Name(self, node: ast.Name) -> ast.Name:
+        if node.id in self.mapping:
+            node.id = self.mapping[node.id]
+        return node
+
+    def visit_arg(self, node: ast.arg) -> ast.arg:
+        if node.arg in self.mapping:
+            node.arg = self.mapping[node.arg]
+        return node
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        # Don't rename the function name itself
+        self.generic_visit(node)
+        return node
+
+
 def normalize_to_concepts(body: str, bindings: dict[str, str]) -> str:
     """Parse, apply concept normalization, return unparsed source."""
     tree = parse_algorithm(body)
@@ -335,11 +421,12 @@ def canonicalize(tree: ast.Module) -> ast.Module:
 
 
 def canonical_dump(body: str, bindings: dict[str, str]) -> str:
-    """Parse, normalize to concepts, canonicalize, and dump the AST."""
+    """Parse, normalize to concepts, alpha-rename, canonicalize, and dump the AST."""
     tree = parse_algorithm(body)
     normalizer = ConceptNormalizer(bindings)
     tree = normalizer.visit(tree)
     ast.fix_missing_locations(tree)
+    tree = PositionalRenamer.rename(tree)
     tree = canonicalize(tree)
     return ast.dump(tree)
 

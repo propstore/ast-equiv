@@ -8,6 +8,7 @@ from typing import Any
 from .canonicalizer import (
     parse_algorithm,
     ConceptNormalizer,
+    PositionalRenamer,
     canonicalize,
     canonical_dump,
     structural_match,
@@ -35,11 +36,12 @@ class ComparisonResult:
 
 
 def _normalize_and_canonicalize(body: str, bindings: dict[str, str]) -> ast.Module:
-    """Parse, normalize to concepts, and canonicalize."""
+    """Parse, normalize to concepts, alpha-rename, and canonicalize."""
     tree = parse_algorithm(body)
     normalizer = ConceptNormalizer(bindings)
     tree = normalizer.visit(tree)
     ast.fix_missing_locations(tree)
+    tree = PositionalRenamer.rename(tree)
     tree = canonicalize(tree)
     return tree
 
@@ -127,6 +129,7 @@ def partial_eval_bytecode(body: str, bindings: dict[str, str], known_values: dic
     tree = substituter.visit(tree)
     ast.fix_missing_locations(tree)
 
+    tree = PositionalRenamer.rename(tree)
     tree = canonicalize(tree)
     return _compile_to_bytecode(tree)
 
