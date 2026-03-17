@@ -86,14 +86,17 @@ class ConceptNormalizer(ast.NodeTransformer):
 class _NameCollector(ast.NodeVisitor):
     """Collect variable names in order of first appearance."""
 
-    def __init__(self):
+    def __init__(self, preserve: frozenset[str] | None = None):
         self.seen: set[str] = set()
         self.order: list[str] = []
         # Names used as attribute roots (e.g. math in math.pi) but never assigned
         self._attr_only_names: set[str] = set()
+        # Concept names (binding values) that should not be positionally renamed
+        self._preserve: frozenset[str] = preserve or frozenset()
 
     def _record(self, name: str) -> None:
-        if name not in self.seen and name not in KNOWN_BUILTINS and name not in self._attr_only_names:
+        if (name not in self.seen and name not in KNOWN_BUILTINS
+                and name not in self._attr_only_names and name not in self._preserve):
             self.seen.add(name)
             self.order.append(name)
 
@@ -142,9 +145,9 @@ class PositionalRenamer(ast.NodeTransformer):
         self.mapping: dict[str, str] = {}
 
     @classmethod
-    def rename(cls, tree: ast.Module) -> ast.Module:
+    def rename(cls, tree: ast.Module, concept_names: frozenset[str] | None = None) -> ast.Module:
         """Build positional mapping and apply to tree."""
-        collector = _NameCollector()
+        collector = _NameCollector(preserve=concept_names)
         collector.visit(tree)
         mapping = {name: f"_v{i}" for i, name in enumerate(collector.order)}
         renamer = cls()
@@ -751,7 +754,8 @@ def canonical_dump(body: str, bindings: dict[str, str]) -> str:
     normalizer = ConceptNormalizer(bindings)
     tree = normalizer.visit(tree)
     ast.fix_missing_locations(tree)
-    tree = PositionalRenamer.rename(tree)
+    concept_names = frozenset(bindings.values())
+    tree = PositionalRenamer.rename(tree, concept_names=concept_names)
     tree = WhileToForNormalizer().visit(tree)
     ast.fix_missing_locations(tree)
     tree = TempVariableInliner().visit(tree)

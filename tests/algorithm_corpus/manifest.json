@@ -7,8 +7,8 @@
         "synthetic": 50
     },
     "by_expected_equivalent": {
-        "true": 72,
-        "false": 62
+        "true": 67,
+        "false": 67
     },
     "by_expected_min_tier": {
         "1": 37,

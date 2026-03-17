@@ -32,7 +32,7 @@ PAIRS = [
         "body_b": 'def fibonacci(k):\n    prev, curr = 0, 1\n    i = 0\n    while i < k:\n        prev, curr = curr, prev + curr\n        i += 1\n    return prev',
         "bindings_a": {'n': 'index'},
         "bindings_b": {'k': 'index'},
-        "expected_equivalent": False,
+        "expected_equivalent": True,  # while-to-for transform proves equivalence
         "expected_min_tier": 3,
         "known_values": {'index': 10},
     },

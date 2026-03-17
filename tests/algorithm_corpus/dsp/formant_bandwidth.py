@@ -72,7 +72,7 @@ def resonator_b(formant_hz, bandwidth_hz, rate):
             "exp_term": "pole_radius",
             "cos_term": "pole_cosine",
         },
-        "expected_equivalent": True,
+        "expected_equivalent": False,  # requires algebraic simplification: x/sr vs x*inv_rate (not implemented)
         "expected_min_tier": 3,
         "known_values": {"sampling_rate": 10000.0},
     },

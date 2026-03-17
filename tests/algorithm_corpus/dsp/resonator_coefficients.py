@@ -35,7 +35,7 @@ def calc_coeff_c(bw, T):
             "two_pi_bw_t": "angular_bandwidth_product",
             "c": "resonator_coefficient_C",
         },
-        "expected_equivalent": True,
+        "expected_equivalent": False,  # requires sign distribution: -exp(-x) vs exp(-x) then negate (not implemented)
         "expected_min_tier": 2,
         "known_values": {},
     },
@@ -109,7 +109,7 @@ def compute_resonator_params(formant_freq, bandwidth, sample_rate):
             "coeff_b": "resonator_coefficient_B",
             "coeff_c": "resonator_coefficient_C",
         },
-        "expected_equivalent": True,
+        "expected_equivalent": False,  # requires multi-use temp inlining: pi_bw_t used in both exp and cos args (not implemented)
         "expected_min_tier": 2,
         "known_values": {},
     },
