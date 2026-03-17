@@ -1,0 +1,20 @@
+{
+    "total_pairs": 134,
+    "by_source": {
+        "dsp": 19,
+        "equibench": 40,
+        "pyclone": 25,
+        "synthetic": 50
+    },
+    "by_expected_equivalent": {
+        "true": 92,
+        "false": 42
+    },
+    "by_expected_min_tier": {
+        "1": 37,
+        "2": 42,
+        "3": 43,
+        "4": 12,
+        "null": 0
+    }
+}
