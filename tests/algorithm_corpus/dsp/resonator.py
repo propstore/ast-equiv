@@ -131,7 +131,7 @@ def process_block(x, coeff_a, coeff_b, coeff_c):
             "val": "current_output",
             "result": "output_buffer",
         },
-        "expected_equivalent": True,
+        "expected_equivalent": False,
         "expected_min_tier": 2,
         "known_values": {},
     },

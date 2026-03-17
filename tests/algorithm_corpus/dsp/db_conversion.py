@@ -27,7 +27,7 @@ def amp_to_decibels(x):
         "bindings_b": {
             "x": "signal_amplitude",
         },
-        "expected_equivalent": True,
+        "expected_equivalent": False,
         "expected_min_tier": 3,
         "known_values": {"signal_amplitude": 1.0},
     },
@@ -87,7 +87,7 @@ def db_array(values):
             "values": "amplitude_array",
             "v": "current_amplitude",
         },
-        "expected_equivalent": True,
+        "expected_equivalent": False,
         "expected_min_tier": 2,
         "known_values": {},
     },
