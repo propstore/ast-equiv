@@ -197,6 +197,36 @@ _SAFE_OPS = {
 _COMMUTATIVE_OPS = (ast.Add, ast.Mult)
 
 
+def _collect_mult_power_chain(node: ast.BinOp) -> tuple[ast.AST | None, int]:
+    """Detect repeated multiplication of the same base in a Mult BinOp chain.
+
+    Handles both pure chains (x * x * x) and already-collapsed ones (x**2 * x).
+    Returns (base_node, total_count) if all operands share the same base,
+    or (None, 0) otherwise.
+    """
+    # Collect (base_dump, count, base_node) for each leaf in the mult chain
+    parts: list[tuple[str, int, ast.AST]] = []
+
+    def _walk(n: ast.AST) -> None:
+        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Mult):
+            _walk(n.left)
+            _walk(n.right)
+        elif (isinstance(n, ast.BinOp) and isinstance(n.op, ast.Pow)
+              and isinstance(n.right, ast.Constant) and isinstance(n.right.value, int)):
+            parts.append((ast.dump(n.left), n.right.value, n.left))
+        else:
+            parts.append((ast.dump(n), 1, n))
+
+    _walk(node)
+    if len(parts) < 2:
+        return None, 0
+    first_dump = parts[0][0]
+    if all(d == first_dump for d, _, _ in parts):
+        total = sum(c for _, c, _ in parts)
+        return parts[0][2], total
+    return None, 0
+
+
 class Canonicalizer(ast.NodeTransformer):
     """Apply canonical transformations to normalize AST structure."""
 
@@ -320,6 +350,19 @@ class Canonicalizer(ast.NodeTransformer):
         elif op_type is ast.Pow:
             if _is_constant_value(node.right, 1):
                 return node.left
+
+        # Repeated multiplication -> power: x * x * x -> x ** 3
+        # Also handles post-child-transform case: x**n * x -> x**(n+1)
+        if op_type is ast.Mult:
+            base, count = _collect_mult_power_chain(node)
+            if base is not None and count >= 2:
+                import copy
+                result = ast.BinOp(
+                    left=copy.deepcopy(base),
+                    op=ast.Pow(),
+                    right=ast.Constant(value=count),
+                )
+                return ast.copy_location(result, node)
 
         # Commutative sort: for *, sort operands by ast.dump()
         # Note: Add is excluded because + is overloaded for lists/strings (not commutative)
