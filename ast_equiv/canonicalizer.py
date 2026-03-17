@@ -179,6 +179,28 @@ class Canonicalizer(ast.NodeTransformer):
                     return ast.UnaryOp(op=ast.Not(), operand=node.left)
         return node
 
+    def visit_BoolOp(self, node: ast.BoolOp) -> ast.AST:
+        self.generic_visit(node)
+        # Chained comparison collapse:
+        # BoolOp(And, [Compare(left, [op1], [mid]), Compare(mid2, [op2], [right])])
+        # where ast.dump(mid) == ast.dump(mid2)
+        # -> Compare(left, [op1, op2], [mid, right])
+        if (isinstance(node.op, ast.And) and len(node.values) == 2
+                and isinstance(node.values[0], ast.Compare)
+                and isinstance(node.values[1], ast.Compare)):
+            cmp1, cmp2 = node.values
+            if (len(cmp1.ops) == 1 and len(cmp1.comparators) == 1
+                    and len(cmp2.ops) == 1 and len(cmp2.comparators) == 1):
+                mid1 = cmp1.comparators[0]
+                mid2 = cmp2.left
+                if ast.dump(mid1) == ast.dump(mid2):
+                    return ast.Compare(
+                        left=cmp1.left,
+                        ops=[cmp1.ops[0], cmp2.ops[0]],
+                        comparators=[mid1, cmp2.comparators[0]],
+                    )
+        return node
+
     def visit_BinOp(self, node: ast.BinOp) -> ast.AST:
         self.generic_visit(node)
         # Constant folding
