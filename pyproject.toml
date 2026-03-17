@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ast-equiv"
+version = "0.1.0"
+description = "Python AST equivalence comparison - four-tier ladder"
+requires-python = ">=3.11"
+license = "MIT"
+readme = "README.md"
+
+[project.optional-dependencies]
+dev = ["pytest", "hypothesis"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["ast_equiv"]
