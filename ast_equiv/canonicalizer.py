@@ -585,6 +585,147 @@ class WhileToForNormalizer(ast.NodeTransformer):
         return node
 
 
+class _VarCounter(ast.NodeVisitor):
+    """Count Store (assignment) and Load (use) occurrences of each variable."""
+
+    def __init__(self):
+        self.stores: dict[str, int] = {}
+        self.loads: dict[str, int] = {}
+        self.in_loop = False
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, ast.Store):
+            self.stores[node.id] = self.stores.get(node.id, 0) + 1
+        elif isinstance(node.ctx, ast.Load):
+            self.loads[node.id] = self.loads.get(node.id, 0) + 1
+        self.generic_visit(node)
+
+    def visit_For(self, node: ast.For) -> None:
+        old = self.in_loop
+        self.in_loop = True
+        self.generic_visit(node)
+        self.in_loop = old
+
+    def visit_While(self, node: ast.While) -> None:
+        old = self.in_loop
+        self.in_loop = True
+        self.generic_visit(node)
+        self.in_loop = old
+
+
+class _VarSubstituter(ast.NodeTransformer):
+    """Replace Name(id=var, ctx=Load) with the inlined expression."""
+
+    def __init__(self, mapping: dict[str, ast.AST]):
+        self.mapping = mapping
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        if isinstance(node.ctx, ast.Load) and node.id in self.mapping:
+            import copy
+            return copy.deepcopy(self.mapping[node.id])
+        return node
+
+
+class TempVariableInliner(ast.NodeTransformer):
+    """Inline single-assignment single-use local variables.
+
+    For variables with exactly 1 Store and 1 Load, not inside a loop body:
+    substitute the RHS at the use site and remove the assignment.
+    Iterates until stable.
+    """
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        self.generic_visit(node)
+        node.body = self._inline_stmts(node.body)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        self.generic_visit(node)
+        node.body = self._inline_stmts(node.body)
+        return node
+
+    def visit_For(self, node: ast.For) -> ast.For:
+        self.generic_visit(node)
+        node.body = self._inline_stmts(node.body)
+        return node
+
+    def visit_While(self, node: ast.While) -> ast.While:
+        self.generic_visit(node)
+        node.body = self._inline_stmts(node.body)
+        return node
+
+    def visit_If(self, node: ast.If) -> ast.If:
+        self.generic_visit(node)
+        node.body = self._inline_stmts(node.body)
+        if node.orelse:
+            node.orelse = self._inline_stmts(node.orelse)
+        return node
+
+    def _inline_stmts(self, stmts: list[ast.stmt]) -> list[ast.stmt]:
+        """Iteratively inline single-use temps until stable."""
+        changed = True
+        while changed:
+            changed = False
+            candidates = self._find_inline_candidates(stmts)
+            if not candidates:
+                break
+
+            # Inline one candidate at a time (its RHS may reference other candidates)
+            var_name, stmt_idx, rhs = candidates[0]
+            mapping: dict[str, ast.AST] = {var_name: rhs}
+            remove_indices: set[int] = {stmt_idx}
+
+            # Apply substitutions and remove assignments
+            new_stmts = []
+            for i, stmt in enumerate(stmts):
+                if i in remove_indices:
+                    changed = True
+                    continue
+                stmt = _VarSubstituter(mapping).visit(stmt)
+                new_stmts.append(stmt)
+            stmts = new_stmts
+
+        return stmts
+
+    def _find_inline_candidates(
+        self, stmts: list[ast.stmt],
+    ) -> list[tuple[str, int, ast.AST]]:
+        """Find single-assignment single-use vars suitable for inlining.
+
+        Returns list of (var_name, stmt_index, rhs_expr).
+        """
+        # Count stores and loads across all statements at this level
+        stores: dict[str, int] = {}
+        loads: dict[str, int] = {}
+        for node in ast.walk(ast.Module(body=stmts, type_ignores=[])):
+            if isinstance(node, ast.Name):
+                if isinstance(node.ctx, ast.Store):
+                    stores[node.id] = stores.get(node.id, 0) + 1
+                elif isinstance(node.ctx, ast.Load):
+                    loads[node.id] = loads.get(node.id, 0) + 1
+
+        # Find single-store single-load assignments at this level
+        candidates = []
+        for i, stmt in enumerate(stmts):
+            if (isinstance(stmt, ast.Assign)
+                    and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)):
+                var_name = stmt.targets[0].id
+                if (stores.get(var_name, 0) == 1
+                        and loads.get(var_name, 0) == 1
+                        and not self._rhs_references(stmt.value, var_name)):
+                    candidates.append((var_name, i, stmt.value))
+        return candidates
+
+    @staticmethod
+    def _rhs_references(rhs: ast.AST, var_name: str) -> bool:
+        """Check if the RHS expression references var_name (self-referential / accumulator)."""
+        for node in ast.walk(rhs):
+            if isinstance(node, ast.Name) and node.id == var_name:
+                return True
+        return False
+
+
 def canonicalize(tree: ast.Module) -> ast.Module:
     """Apply canonical transformations to an AST."""
     canonicalizer = Canonicalizer()
@@ -595,6 +736,10 @@ def canonicalize(tree: ast.Module) -> ast.Module:
     tree = ConstantComparisonFolder().visit(tree)
     ast.fix_missing_locations(tree)
     tree = DeadBranchEliminator().visit(tree)
+    ast.fix_missing_locations(tree)
+
+    # Re-run temp inlining: dead branch elimination may expose new single-use vars
+    tree = TempVariableInliner().visit(tree)
     ast.fix_missing_locations(tree)
 
     return tree
@@ -608,6 +753,8 @@ def canonical_dump(body: str, bindings: dict[str, str]) -> str:
     ast.fix_missing_locations(tree)
     tree = PositionalRenamer.rename(tree)
     tree = WhileToForNormalizer().visit(tree)
+    ast.fix_missing_locations(tree)
+    tree = TempVariableInliner().visit(tree)
     ast.fix_missing_locations(tree)
     tree = canonicalize(tree)
     return ast.dump(tree)
