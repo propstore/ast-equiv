@@ -448,6 +448,143 @@ def _is_constant_value(node: ast.AST, value: Any) -> bool:
     return isinstance(node, ast.Constant) and node.value == value and type(node.value) == type(value)
 
 
+class WhileToForNormalizer(ast.NodeTransformer):
+    """Convert `init; while cond: body; incr` patterns to `for var in range(...)`.
+
+    Detects statement sequences like:
+        var = init_val
+        while var < bound:
+            ...body...
+            var = var + 1
+    And converts to:
+        for var in range([init_val,] bound):
+            ...body...  (without the increment)
+    """
+
+    def _transform_stmts(self, stmts: list[ast.stmt]) -> list[ast.stmt]:
+        """Scan a statement list for init+while patterns and convert them."""
+        result = []
+        i = 0
+        while i < len(stmts):
+            # Check for init+while pattern: stmts[i] is Assign, stmts[i+1] is While
+            if (i + 1 < len(stmts)
+                    and isinstance(stmts[i], ast.Assign)
+                    and len(stmts[i].targets) == 1
+                    and isinstance(stmts[i].targets[0], ast.Name)
+                    and isinstance(stmts[i].value, ast.Constant)
+                    and isinstance(stmts[i].value.value, (int, float))
+                    and isinstance(stmts[i + 1], ast.While)):
+                assign = stmts[i]
+                while_node = stmts[i + 1]
+                var_name = assign.targets[0].id
+                init_val = assign.value.value
+                converted = self._try_convert(var_name, init_val, while_node)
+                if converted is not None:
+                    result.append(converted)
+                    i += 2
+                    continue
+            result.append(stmts[i])
+            i += 1
+        return result
+
+    def _try_convert(self, var_name: str, init_val, while_node: ast.While) -> ast.For | None:
+        """Try to convert a while loop to a for loop."""
+        # Check test: var < bound
+        test = while_node.test
+        if not (isinstance(test, ast.Compare)
+                and len(test.ops) == 1
+                and isinstance(test.ops[0], ast.Lt)
+                and len(test.comparators) == 1
+                and isinstance(test.left, ast.Name)
+                and test.left.id == var_name):
+            return None
+
+        bound = test.comparators[0]
+
+        # Check last statement in body: var = var + 1 OR var += 1
+        if not while_node.body:
+            return None
+        last_stmt = while_node.body[-1]
+        is_assign_incr = (isinstance(last_stmt, ast.Assign)
+                and len(last_stmt.targets) == 1
+                and isinstance(last_stmt.targets[0], ast.Name)
+                and last_stmt.targets[0].id == var_name
+                and isinstance(last_stmt.value, ast.BinOp)
+                and isinstance(last_stmt.value.op, ast.Add)
+                and isinstance(last_stmt.value.left, ast.Name)
+                and last_stmt.value.left.id == var_name
+                and isinstance(last_stmt.value.right, ast.Constant)
+                and last_stmt.value.right.value == 1)
+        is_aug_incr = (isinstance(last_stmt, ast.AugAssign)
+                and isinstance(last_stmt.target, ast.Name)
+                and last_stmt.target.id == var_name
+                and isinstance(last_stmt.op, ast.Add)
+                and isinstance(last_stmt.value, ast.Constant)
+                and last_stmt.value.value == 1)
+        if not (is_assign_incr or is_aug_incr):
+            return None
+
+        # Build the for loop body (without the increment)
+        for_body = while_node.body[:-1]
+
+        # Recursively transform nested while loops in the body
+        for_body = self._transform_stmts(for_body)
+
+        if not for_body:
+            for_body = [ast.Pass()]
+
+        # Build range args
+        import copy
+        if init_val == 0:
+            range_args = [copy.deepcopy(bound)]
+        else:
+            range_args = [ast.Constant(value=init_val), copy.deepcopy(bound)]
+
+        for_node = ast.For(
+            target=ast.Name(id=var_name, ctx=ast.Store()),
+            iter=ast.Call(
+                func=ast.Name(id='range', ctx=ast.Load()),
+                args=range_args,
+                keywords=[],
+            ),
+            body=for_body,
+            orelse=[],
+        )
+        return ast.copy_location(for_node, while_node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        self.generic_visit(node)
+        node.body = self._transform_stmts(node.body)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        self.generic_visit(node)
+        node.body = self._transform_stmts(node.body)
+        return node
+
+    def visit_For(self, node: ast.For) -> ast.For:
+        self.generic_visit(node)
+        node.body = self._transform_stmts(node.body)
+        return node
+
+    def visit_While(self, node: ast.While) -> ast.While:
+        self.generic_visit(node)
+        node.body = self._transform_stmts(node.body)
+        return node
+
+    def visit_If(self, node: ast.If) -> ast.If:
+        self.generic_visit(node)
+        node.body = self._transform_stmts(node.body)
+        if node.orelse:
+            node.orelse = self._transform_stmts(node.orelse)
+        return node
+
+    def visit_With(self, node: ast.With) -> ast.With:
+        self.generic_visit(node)
+        node.body = self._transform_stmts(node.body)
+        return node
+
+
 def canonicalize(tree: ast.Module) -> ast.Module:
     """Apply canonical transformations to an AST."""
     canonicalizer = Canonicalizer()
@@ -470,6 +607,8 @@ def canonical_dump(body: str, bindings: dict[str, str]) -> str:
     tree = normalizer.visit(tree)
     ast.fix_missing_locations(tree)
     tree = PositionalRenamer.rename(tree)
+    tree = WhileToForNormalizer().visit(tree)
+    ast.fix_missing_locations(tree)
     tree = canonicalize(tree)
     return ast.dump(tree)
 

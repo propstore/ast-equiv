@@ -9,6 +9,7 @@ from .canonicalizer import (
     parse_algorithm,
     ConceptNormalizer,
     PositionalRenamer,
+    WhileToForNormalizer,
     canonicalize,
     canonical_dump,
     structural_match,
@@ -42,6 +43,8 @@ def _normalize_and_canonicalize(body: str, bindings: dict[str, str]) -> ast.Modu
     tree = normalizer.visit(tree)
     ast.fix_missing_locations(tree)
     tree = PositionalRenamer.rename(tree)
+    tree = WhileToForNormalizer().visit(tree)
+    ast.fix_missing_locations(tree)
     tree = canonicalize(tree)
     return tree
 
@@ -130,6 +133,8 @@ def partial_eval_bytecode(body: str, bindings: dict[str, str], known_values: dic
     ast.fix_missing_locations(tree)
 
     tree = PositionalRenamer.rename(tree)
+    tree = WhileToForNormalizer().visit(tree)
+    ast.fix_missing_locations(tree)
     tree = canonicalize(tree)
     return _compile_to_bytecode(tree)
 
