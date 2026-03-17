@@ -101,6 +101,11 @@ _SAFE_OPS = {
     ast.FloorDiv: operator.floordiv,
     ast.Mod: operator.mod,
     ast.Pow: operator.pow,
+    ast.BitAnd: operator.and_,
+    ast.BitOr: operator.or_,
+    ast.BitXor: operator.xor,
+    ast.LShift: operator.lshift,
+    ast.RShift: operator.rshift,
 }
 
 _COMMUTATIVE_OPS = (ast.Add, ast.Mult)
@@ -219,6 +224,69 @@ class Canonicalizer(ast.NodeTransformer):
         return node
 
 
+_COMPARE_OPS = {
+    ast.Eq: operator.eq,
+    ast.NotEq: operator.ne,
+    ast.Lt: operator.lt,
+    ast.LtE: operator.le,
+    ast.Gt: operator.gt,
+    ast.GtE: operator.ge,
+    ast.Is: lambda a, b: a is b,
+    ast.IsNot: lambda a, b: a is not b,
+}
+
+
+class ConstantComparisonFolder(ast.NodeTransformer):
+    """Evaluate Compare nodes where all operands are constants.
+
+    E.g. 'mean' == 'sum' -> Constant(False), 'mean' == 'mean' -> Constant(True).
+    """
+
+    def visit_Compare(self, node: ast.Compare) -> ast.AST:
+        self.generic_visit(node)
+        # All operands must be constants
+        if not isinstance(node.left, ast.Constant):
+            return node
+        if not all(isinstance(c, ast.Constant) for c in node.comparators):
+            return node
+
+        # Evaluate the chain: left op1 comp1 op2 comp2 ...
+        left_val = node.left.value
+        for op, comparator in zip(node.ops, node.comparators):
+            op_type = type(op)
+            if op_type not in _COMPARE_OPS:
+                return node
+            try:
+                if not _COMPARE_OPS[op_type](left_val, comparator.value):
+                    return ast.Constant(value=False)
+            except TypeError:
+                return node
+            left_val = comparator.value
+        return ast.Constant(value=True)
+
+
+class DeadBranchEliminator(ast.NodeTransformer):
+    """Eliminate If nodes where the test is a constant True/False.
+
+    - If(test=Constant(True)) -> replace with body statements
+    - If(test=Constant(False)) with orelse -> replace with orelse statements
+    - If(test=Constant(False)) without orelse -> remove entirely
+    """
+
+    def visit_If(self, node: ast.If) -> Any:
+        self.generic_visit(node)
+        if isinstance(node.test, ast.Constant):
+            if node.test.value:
+                # True branch: replace with body
+                return node.body
+            else:
+                # False branch: replace with orelse or remove
+                if node.orelse:
+                    return node.orelse
+                return []  # remove entirely
+        return node
+
+
 def _is_constant(node: ast.AST, value: Any) -> bool:
     """Check if node is a Constant with the given value (identity check)."""
     return isinstance(node, ast.Constant) and node.value is value
@@ -234,6 +302,13 @@ def canonicalize(tree: ast.Module) -> ast.Module:
     canonicalizer = Canonicalizer()
     tree = canonicalizer.visit(tree)
     ast.fix_missing_locations(tree)
+
+    # Constant comparison folding + dead branch elimination
+    tree = ConstantComparisonFolder().visit(tree)
+    ast.fix_missing_locations(tree)
+    tree = DeadBranchEliminator().visit(tree)
+    ast.fix_missing_locations(tree)
+
     return tree
 
 
