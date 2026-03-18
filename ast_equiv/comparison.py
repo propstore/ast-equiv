@@ -1,4 +1,4 @@
-"""Four-tier comparison ladder for algorithm equivalence."""
+"""Five-tier comparison ladder for algorithm equivalence."""
 import ast
 import dis
 from dataclasses import dataclass, field
@@ -15,6 +15,7 @@ from .canonicalizer import (
     canonical_dump,
     structural_match,
 )
+from .sympy_bridge import sympy_expressions_equivalent
 
 
 # Opcodes to skip: vary by source layout, not semantics
@@ -219,6 +220,16 @@ def compare(
             equivalent=True, tier=1, similarity=1.0,
             details="Canonical AST match",
         )
+
+    # Tier 1.5: SymPy algebraic equivalence on canonical trees
+    try:
+        if sympy_expressions_equivalent(tree_a, tree_b):
+            return ComparisonResult(
+                equivalent=True, tier=2, similarity=similarity,
+                details="SymPy algebraic equivalence",
+            )
+    except Exception:
+        pass
 
     # Tier 2: Bytecode match
     try:

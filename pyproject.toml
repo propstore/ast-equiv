@@ -9,9 +9,15 @@ description = "Python AST equivalence comparison - four-tier ladder"
 requires-python = ">=3.11"
 license = "MIT"
 readme = "README.md"
+dependencies = [
+    "sympy>=1.14.0",
+]
 
 [project.optional-dependencies]
 dev = ["pytest", "hypothesis"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["ast_equiv"]

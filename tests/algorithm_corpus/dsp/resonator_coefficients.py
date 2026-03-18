@@ -35,7 +35,7 @@ def calc_coeff_c(bw, T):
             "two_pi_bw_t": "angular_bandwidth_product",
             "c": "resonator_coefficient_C",
         },
-        "expected_equivalent": False,  # requires sign distribution: -exp(-x) vs exp(-x) then negate (not implemented)
+        "expected_equivalent": True,
         "expected_min_tier": 2,
         "known_values": {},
     },

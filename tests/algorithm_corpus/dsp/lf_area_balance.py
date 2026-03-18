@@ -137,7 +137,7 @@ def find_alpha_nr(omega, t_exc, exc_amp, decay, ret_tau, guess, tolerance, limit
             "limit": "max_iterations",
             "alpha": "lf_growth_constant",
         },
-        "expected_equivalent": False,  # requires algebraic factoring: (a*s - w*c)/d + w/d vs (a*s - w*c + w)/d (not implemented)
+        "expected_equivalent": True,
         "expected_min_tier": 2,
         "known_values": {},
     },
