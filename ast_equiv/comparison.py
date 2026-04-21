@@ -1,8 +1,9 @@
 """Five-tier comparison ladder for algorithm equivalence."""
 import ast
 import dis
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from difflib import SequenceMatcher
+from enum import Enum
 from typing import Any
 
 from .canonicalizer import (
@@ -29,11 +30,53 @@ SKIP_OPS = frozenset({
 _INPLACE_OFFSET = 13
 
 
+class Tier(Enum):
+    """Named comparison tiers with stable ordering for corpus expectations."""
+
+    NONE = ("none", 0)
+    CANONICAL = ("canonical", 1)
+    SYMPY = ("sympy", 2)
+    BYTECODE = ("bytecode", 2)
+    PARTIAL_EVAL = ("partial_eval", 3)
+
+    def __init__(self, label: str, rank: int):
+        self.label = label
+        self.rank = rank
+
+    def __le__(self, other: object) -> bool:
+        if isinstance(other, Tier):
+            return self.rank <= other.rank
+        if isinstance(other, int):
+            return self.rank <= other
+        return NotImplemented
+
+    def __lt__(self, other: object) -> bool:
+        if isinstance(other, Tier):
+            return self.rank < other.rank
+        if isinstance(other, int):
+            return self.rank < other
+        return NotImplemented
+
+    def __ge__(self, other: object) -> bool:
+        if isinstance(other, Tier):
+            return self.rank >= other.rank
+        if isinstance(other, int):
+            return self.rank >= other
+        return NotImplemented
+
+    def __gt__(self, other: object) -> bool:
+        if isinstance(other, Tier):
+            return self.rank > other.rank
+        if isinstance(other, int):
+            return self.rank > other
+        return NotImplemented
+
+
 @dataclass
 class ComparisonResult:
     """Result of comparing two algorithm implementations."""
     equivalent: bool
-    tier: int  # 0 = not equivalent, 1-4 = which tier matched
+    tier: Tier
     similarity: float  # 0.0-1.0 structural similarity
     details: str = ""
 
@@ -200,12 +243,11 @@ def compare(
     body_b: str, bindings_b: dict,
     known_values: dict[str, Any] | None = None,
 ) -> ComparisonResult:
-    """Four-tier comparison ladder.
+    """Comparison ladder.
 
     Tier 1: Canonical AST match (structural_match on canonical_dump)
-    Tier 2: Bytecode match
+    Tier 2: SymPy algebraic equivalence or bytecode match
     Tier 3: Partial evaluation match (if known_values provided)
-    Tier 4: High structural similarity (>= 0.95)
     """
     # Compute similarity for all paths
     tree_a = _normalize_and_canonicalize(body_a, bindings_a)
@@ -217,7 +259,7 @@ def compare(
     dump_b = canonical_dump(body_b, bindings_b)
     if structural_match(dump_a, dump_b):
         return ComparisonResult(
-            equivalent=True, tier=1, similarity=1.0,
+            equivalent=True, tier=Tier.CANONICAL, similarity=1.0,
             details="Canonical AST match",
         )
 
@@ -225,7 +267,7 @@ def compare(
     try:
         if sympy_expressions_equivalent(tree_a, tree_b):
             return ComparisonResult(
-                equivalent=True, tier=2, similarity=similarity,
+                equivalent=True, tier=Tier.SYMPY, similarity=similarity,
                 details="SymPy algebraic equivalence",
             )
     except Exception:
@@ -235,7 +277,7 @@ def compare(
     try:
         if bytecode_match(body_a, bindings_a, body_b, bindings_b):
             return ComparisonResult(
-                equivalent=True, tier=2, similarity=similarity,
+                equivalent=True, tier=Tier.BYTECODE, similarity=similarity,
                 details="Bytecode match",
             )
     except Exception:
@@ -246,7 +288,7 @@ def compare(
         try:
             if partial_eval_match(body_a, bindings_a, body_b, bindings_b, known_values):
                 return ComparisonResult(
-                    equivalent=True, tier=3, similarity=similarity,
+                    equivalent=True, tier=Tier.PARTIAL_EVAL, similarity=similarity,
                     details="Partial evaluation match",
                 )
         except Exception:
@@ -257,6 +299,6 @@ def compare(
     # (e.g., `a and b` vs `a or b` have near-identical ASTs but different semantics)
 
     return ComparisonResult(
-        equivalent=False, tier=0, similarity=similarity,
+        equivalent=False, tier=Tier.NONE, similarity=similarity,
         details="No equivalence found",
     )

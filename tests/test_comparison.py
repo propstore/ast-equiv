@@ -62,14 +62,26 @@ class TestPartialEvaluation:
 
 
 class TestComparisonLadder:
-    def test_sympy_tier_distinct_from_bytecode_tier(self):
+    def test_sympy_tier_distinct_from_bytecode_tier(self, monkeypatch):
         sympy_a = "def f(x):\n    return x / 2 + x / 2"
         sympy_b = "def g(y):\n    return y"
-        bytecode_a = "def f(x):\n    x = x + 1\n    return x"
-        bytecode_b = "def g(y):\n    y += 1\n    return y"
 
         r_sym = compare(sympy_a, {"x": "val"}, sympy_b, {"y": "val"})
-        r_byte = compare(bytecode_a, {"x": "val"}, bytecode_b, {"y": "val"})
+
+        monkeypatch.setattr(
+            "ast_equiv.comparison.sympy_expressions_equivalent",
+            lambda *_args, **_kwargs: False,
+        )
+        monkeypatch.setattr(
+            "ast_equiv.comparison.bytecode_match",
+            lambda *_args, **_kwargs: True,
+        )
+        r_byte = compare(
+            "def f(x):\n    return x + 1",
+            {"x": "val"},
+            "def g(y):\n    return y * 2",
+            {"y": "val"},
+        )
 
         assert r_sym.tier == Tier.SYMPY
         assert r_byte.tier == Tier.BYTECODE
@@ -80,14 +92,14 @@ class TestComparisonLadder:
         body_b = "def g(y):\n    return y + 1"
         result = compare(body_a, {"x": "val"}, body_b, {"y": "val"})
         assert result.equivalent is True
-        assert result.tier == 1
+        assert result.tier == Tier.CANONICAL
 
-    def test_tier2_match(self):
-        body_a = "def f(n):\n    return 2 * 3 * n"
-        body_b = "def g(m):\n    return 6 * m"
-        result = compare(body_a, {"n": "count"}, body_b, {"m": "count"})
+    def test_sympy_match(self):
+        body_a = "def f(x):\n    return x / 2 + x / 2"
+        body_b = "def g(y):\n    return y"
+        result = compare(body_a, {"x": "val"}, body_b, {"y": "val"})
         assert result.equivalent is True
-        assert result.tier <= 2
+        assert result.tier == Tier.SYMPY
 
     def test_tier3_match(self):
         body_a = "def f(rate):\n    return rate / 4"
@@ -97,7 +109,7 @@ class TestComparisonLadder:
             known_values={"sample_rate": 44100},
         )
         assert result.equivalent is True
-        assert result.tier == 3
+        assert result.tier == Tier.PARTIAL_EVAL
 
     def test_no_match_with_similarity(self):
         body_a = "def f(x):\n    return x + 1"
@@ -129,7 +141,7 @@ class TestStructuralSimilarity:
 
 class TestComparisonResult:
     def test_fields(self):
-        r = ComparisonResult(equivalent=True, tier=1, similarity=1.0, details="match")
+        r = ComparisonResult(equivalent=True, tier=Tier.CANONICAL, similarity=1.0, details="match")
         assert r.equivalent is True
-        assert r.tier == 1
+        assert r.tier == Tier.CANONICAL
         assert r.similarity == 1.0

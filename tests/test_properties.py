@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given, strategies as st, assume, settings
 
 from ast_equiv.canonicalizer import parse_algorithm, canonical_dump, AlgorithmParseError
-from ast_equiv.comparison import compare, structural_similarity
+from ast_equiv.comparison import Tier, compare, structural_similarity
 
 
 # Strategy: generate simple function bodies
@@ -22,7 +22,7 @@ def test_self_equivalence(body):
     """Any algorithm is equivalent to itself."""
     result = compare(body, {"x": "val"}, body, {"x": "val"})
     assert result.equivalent is True
-    assert result.tier == 1
+    assert result.tier == Tier.CANONICAL
 
 
 @given(body=simple_body)

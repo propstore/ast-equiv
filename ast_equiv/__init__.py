@@ -12,6 +12,7 @@ from .canonicalizer import (
 from .comparison import (
     compare,
     ComparisonResult,
+    Tier,
     normalized_bytecode,
     bytecode_match,
     partial_eval_bytecode,
@@ -30,6 +31,7 @@ __all__ = [
     "KNOWN_BUILTINS",
     "compare",
     "ComparisonResult",
+    "Tier",
     "normalized_bytecode",
     "bytecode_match",
     "partial_eval_bytecode",
