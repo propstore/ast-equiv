@@ -3,6 +3,7 @@ import pytest
 from ast_equiv.comparison import (
     compare,
     ComparisonResult,
+    Tier,
     normalized_bytecode,
     bytecode_match,
     partial_eval_bytecode,
@@ -61,6 +62,19 @@ class TestPartialEvaluation:
 
 
 class TestComparisonLadder:
+    def test_sympy_tier_distinct_from_bytecode_tier(self):
+        sympy_a = "def f(x):\n    return x / 2 + x / 2"
+        sympy_b = "def g(y):\n    return y"
+        bytecode_a = "def f(x):\n    x = x + 1\n    return x"
+        bytecode_b = "def g(y):\n    y += 1\n    return y"
+
+        r_sym = compare(sympy_a, {"x": "val"}, sympy_b, {"y": "val"})
+        r_byte = compare(bytecode_a, {"x": "val"}, bytecode_b, {"y": "val"})
+
+        assert r_sym.tier == Tier.SYMPY
+        assert r_byte.tier == Tier.BYTECODE
+        assert r_sym.tier != r_byte.tier
+
     def test_tier1_match(self):
         body_a = "def f(x):\n    return x + 1"
         body_b = "def g(y):\n    return y + 1"
