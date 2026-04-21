@@ -11,7 +11,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"rate": 44100},
     },
     {
@@ -31,7 +31,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"debug": False},
     },
     {
@@ -53,7 +53,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"n": 3},
     },
     {
@@ -71,7 +71,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"width": 10, "height": 20},
     },
     {
@@ -87,7 +87,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"scale": 2},
     },
     {
@@ -103,7 +103,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"scale": 5},
     },
     {
@@ -119,7 +119,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"exp": 2},
     },
     {
@@ -140,7 +140,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"mode": "mean"},
     },
     {
@@ -156,7 +156,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"step": 4},
     },
     {
@@ -172,7 +172,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"threshold": 0.5},
     },
     {
@@ -188,7 +188,7 @@ PAIRS = [
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"offset": 10},
     },
 ]

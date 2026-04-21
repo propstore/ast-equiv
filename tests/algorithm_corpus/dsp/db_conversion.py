@@ -28,7 +28,7 @@ def amp_to_decibels(x):
             "x": "signal_amplitude",
         },
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"signal_amplitude": 1.0},
     },
     {
@@ -54,7 +54,7 @@ def to_db_amplitude(amp_value):
             "amp_value": "signal_level",
         },
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {"signal_level": 2.0},
     },
     {

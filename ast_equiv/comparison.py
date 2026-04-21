@@ -36,8 +36,8 @@ class Tier(Enum):
     NONE = ("none", 0)
     CANONICAL = ("canonical", 1)
     SYMPY = ("sympy", 2)
-    BYTECODE = ("bytecode", 2)
-    PARTIAL_EVAL = ("partial_eval", 3)
+    BYTECODE = ("bytecode", 3)
+    PARTIAL_EVAL = ("partial_eval", 4)
 
     def __init__(self, label: str, rank: int):
         self.label = label
@@ -247,7 +247,8 @@ def compare(
 
     Tier 1: Canonical AST match (structural_match on canonical_dump)
     Tier 2: SymPy algebraic equivalence or bytecode match
-    Tier 3: Partial evaluation match (if known_values provided)
+    Tier 3: Bytecode match
+    Tier 4: Partial evaluation match (if known_values provided)
     """
     # Compute similarity for all paths
     tree_a = _normalize_and_canonicalize(body_a, bindings_a)

@@ -13,7 +13,7 @@ PAIRS = [
         "bindings_a": {'a': 'dividend', 'b': 'divisor'},
         "bindings_b": {'x': 'dividend', 'y': 'divisor'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'dividend': 48, 'divisor': 18},
     },
     {
@@ -23,7 +23,7 @@ PAIRS = [
         "bindings_a": {'n': 'count'},
         "bindings_b": {'x': 'count'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'count': 6},
     },
     {
@@ -33,7 +33,7 @@ PAIRS = [
         "bindings_a": {'n': 'index'},
         "bindings_b": {'k': 'index'},
         "expected_equivalent": True,  # while-to-for transform proves equivalence
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'index': 10},
     },
     {
@@ -63,7 +63,7 @@ PAIRS = [
         "bindings_a": {'base': 'base_val', 'exp': 'exponent'},
         "bindings_b": {'b': 'base_val', 'e': 'exponent'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'base_val': 2, 'exponent': 10},
     },
     {
@@ -73,7 +73,7 @@ PAIRS = [
         "bindings_a": {'s': 'word'},
         "bindings_b": {'text': 'word'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'word': 'racecar'},
     },
     {
@@ -113,7 +113,7 @@ PAIRS = [
         "bindings_a": {'nested': 'matrix'},
         "bindings_b": {'lists': 'matrix'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'matrix': [[1, 2], [3, 4], [5]]},
     },
     {
@@ -143,7 +143,7 @@ PAIRS = [
         "bindings_a": {'n': 'number'},
         "bindings_b": {'x': 'number'},
         "expected_equivalent": True,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'number': 42},
     },
     {
@@ -183,7 +183,7 @@ PAIRS = [
         "bindings_a": {'n': 'number'},
         "bindings_b": {'x': 'number'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'number': 12345},
     },
     {
@@ -193,7 +193,7 @@ PAIRS = [
         "bindings_a": {'lst': 'numbers'},
         "bindings_b": {'nums': 'numbers'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'numbers': [1, 2, 3, 4, 5, 6]},
     },
     {
@@ -263,7 +263,7 @@ PAIRS = [
         "bindings_a": {'lst': 'data', 'val': 'target'},
         "bindings_b": {'lst': 'data', 'val': 'target'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'data': [1, 2, 3, 2, 4], 'target': 2},
     },
     {
@@ -363,7 +363,7 @@ PAIRS = [
         "bindings_a": {'lst': 'items', 'k': 'shift'},
         "bindings_b": {'lst': 'items', 'k': 'shift'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'items': [1, 2, 3, 4, 5], 'shift': 2},
     },
     {
@@ -383,7 +383,7 @@ PAIRS = [
         "bindings_a": {'a': 'left', 'b': 'right'},
         "bindings_b": {'a': 'left', 'b': 'right'},
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {'left': [1, 2, 3], 'right': [4, 5]},
     },
     {

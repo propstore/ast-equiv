@@ -80,7 +80,7 @@ def resonator_tdf2(sample, gain, fb1, fb2, state1, state2):
             "output": "resonator_output",
         },
         "expected_equivalent": False,
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {},
     },
     {

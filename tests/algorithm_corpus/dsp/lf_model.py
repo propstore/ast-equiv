@@ -134,7 +134,7 @@ def opening_phase(amp, grow, freq_rad, delta_t, length):
             "y": "output_array",
         },
         "expected_equivalent": False,  # requires loop index offset transform: range(N) vs range(1, N+1) with j-1 (not implemented)
-        "expected_min_tier": 3,
+        "expected_min_tier": 4,
         "known_values": {},
     },
 ]
