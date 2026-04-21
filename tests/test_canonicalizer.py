@@ -99,6 +99,20 @@ class TestCanonicalize:
         dump_b = canonical_dump(body_b, {"n": "count"})
         assert dump_a == dump_b
 
+    def test_true_comparison_preserved_for_non_bool_annotation(self):
+        body = "def f(x: int):\n    return x == True"
+        dump = canonical_dump(body, {})
+
+        assert "Compare" in dump
+        assert "Eq" in dump
+        assert "Constant(value=True" in dump
+
+    def test_true_comparison_rewritten_for_bool_annotation(self):
+        body_a = "def f(x: bool):\n    return x == True"
+        body_b = "def f(x: bool):\n    return x"
+
+        assert canonical_dump(body_a, {}) == canonical_dump(body_b, {})
+
 
 class TestAlphaEquivalence:
     def test_same_names_match(self):
