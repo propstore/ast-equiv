@@ -1,9 +1,11 @@
 """Tests for ast_equiv.comparison -- TDD: all tests fail until implementation exists."""
 import pytest
+from ast_equiv.canonicalizer import canonical_dump
 from ast_equiv.comparison import (
     compare,
     ComparisonResult,
     Tier,
+    _normalize_and_canonicalize,
     normalized_bytecode,
     bytecode_match,
     partial_eval_bytecode,
@@ -62,6 +64,16 @@ class TestPartialEvaluation:
 
 
 class TestComparisonLadder:
+    def test_compare_pipeline_matches_canonical_dump_concept_names(self):
+        import ast
+
+        body = "def f(x):\n    return x + 1"
+        bindings = {"x": "mass"}
+
+        pipeline_dump = ast.dump(_normalize_and_canonicalize(body, bindings))
+
+        assert pipeline_dump == canonical_dump(body, bindings)
+
     def test_sympy_tier_distinct_from_bytecode_tier(self, monkeypatch):
         sympy_a = "def f(x):\n    return x / 2 + x / 2"
         sympy_b = "def g(y):\n    return y"
