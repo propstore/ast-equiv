@@ -101,7 +101,7 @@ class TestCanonicalize:
 
     def test_true_comparison_preserved_for_non_bool_annotation(self):
         body = "def f(x: int):\n    return x == True"
-        dump = canonical_dump(body, {"produce": "produce", "g": "g", "use": "use"})
+        dump = canonical_dump(body, {})
 
         assert "Compare" in dump
         assert "Eq" in dump
@@ -122,7 +122,7 @@ class TestCanonicalize:
         )
         dump = canonical_dump(body, {"produce": "produce", "g": "g", "use": "use"})
 
-        assert dump.index("produce") < dump.index("g")
+        assert dump.index("Name(id='produce'") < dump.index("Name(id='g'")
 
 
 class TestAlphaEquivalence:

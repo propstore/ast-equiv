@@ -753,7 +753,8 @@ class TempVariableInliner(ast.NodeTransformer):
                 var_name = stmt.targets[0].id
                 if (stores.get(var_name, 0) == 1
                         and loads.get(var_name, 0) == 1
-                        and not self._rhs_references(stmt.value, var_name)):
+                        and not self._rhs_references(stmt.value, var_name)
+                        and self._rhs_is_safe_to_inline(stmt.value)):
                     candidates.append((var_name, i, stmt.value))
         return candidates
 
@@ -764,6 +765,67 @@ class TempVariableInliner(ast.NodeTransformer):
             if isinstance(node, ast.Name) and node.id == var_name:
                 return True
         return False
+
+    @staticmethod
+    def _rhs_is_safe_to_inline(rhs: ast.AST) -> bool:
+        """Return True only for RHS forms that can be moved to the use site."""
+        return _is_safe_inline_expr(rhs)
+
+
+_PURE_INLINE_BUILTINS = frozenset({"abs", "min", "max", "sum", "round", "pow", "int", "float"})
+
+
+def _is_safe_inline_expr(node: ast.AST) -> bool:
+    if isinstance(node, (ast.Constant, ast.Name)):
+        return True
+    if isinstance(node, ast.UnaryOp):
+        return _is_safe_inline_expr(node.operand)
+    if isinstance(node, ast.BinOp):
+        return _is_safe_inline_expr(node.left) and _is_safe_inline_expr(node.right)
+    if isinstance(node, ast.BoolOp):
+        return all(_is_safe_inline_expr(value) for value in node.values)
+    if isinstance(node, ast.Compare):
+        return _is_safe_inline_expr(node.left) and all(
+            _is_safe_inline_expr(comparator) for comparator in node.comparators
+        )
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return all(_is_safe_inline_expr(elt) for elt in node.elts)
+    if isinstance(node, ast.Dict):
+        return all(
+            (key is None or _is_safe_inline_expr(key)) and _is_safe_inline_expr(value)
+            for key, value in zip(node.keys, node.values)
+        )
+    if isinstance(node, ast.Attribute):
+        return isinstance(node.value, ast.Name) and node.value.id == "math"
+    if isinstance(node, ast.Call):
+        return _is_safe_inline_call(node)
+    return isinstance(
+        node,
+        (
+            ast.Load,
+            ast.operator,
+            ast.unaryop,
+            ast.boolop,
+            ast.cmpop,
+        ),
+    )
+
+
+def _is_safe_inline_call(node: ast.Call) -> bool:
+    if node.keywords:
+        return False
+    if isinstance(node.func, ast.Name):
+        safe_func = node.func.id in _PURE_INLINE_BUILTINS
+    elif isinstance(node.func, ast.Attribute):
+        safe_func = isinstance(node.func.value, ast.Name) and node.func.value.id == "math"
+    else:
+        safe_func = False
+    if not safe_func:
+        return False
+    # Unknown calls are blocked because inlining can reorder effects across
+    # intervening statements; whitelisted math/builtin calls keep algebraic
+    # corpus normalization without moving user code.
+    return all(_is_safe_inline_expr(arg) for arg in node.args)
 
 
 def canonicalize(tree: ast.Module) -> ast.Module:
