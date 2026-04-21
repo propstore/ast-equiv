@@ -48,8 +48,8 @@ PAIRS = [
     },
     {
         "name": "boolean_equals_true",
-        "body_a": "def algorithm(x):\n    if x == True:\n        return 1\n    return 0",
-        "body_b": "def algorithm(x):\n    if x:\n        return 1\n    return 0",
+        "body_a": "def algorithm(x: bool):\n    if x == True:\n        return 1\n    return 0",
+        "body_b": "def algorithm(x: bool):\n    if x:\n        return 1\n    return 0",
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,
@@ -58,8 +58,8 @@ PAIRS = [
     },
     {
         "name": "boolean_equals_false",
-        "body_a": "def algorithm(x):\n    if x == False:\n        return 1\n    return 0",
-        "body_b": "def algorithm(x):\n    if not x:\n        return 1\n    return 0",
+        "body_a": "def algorithm(x: bool):\n    if x == False:\n        return 1\n    return 0",
+        "body_b": "def algorithm(x: bool):\n    if not x:\n        return 1\n    return 0",
         "bindings_a": {},
         "bindings_b": {},
         "expected_equivalent": True,

@@ -233,6 +233,38 @@ def _collect_mult_power_chain(node: ast.BinOp) -> tuple[ast.AST | None, int]:
 class Canonicalizer(ast.NodeTransformer):
     """Apply canonical transformations to normalize AST structure."""
 
+    def __init__(self):
+        self._bool_names_stack: list[frozenset[str]] = []
+
+    @staticmethod
+    def _annotation_is_bool(annotation: ast.AST | None) -> bool:
+        return isinstance(annotation, ast.Name) and annotation.id == "bool"
+
+    def _function_bool_names(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> frozenset[str]:
+        bool_names = {
+            arg.arg
+            for arg in node.args.args
+            if self._annotation_is_bool(arg.annotation)
+        }
+        for child in ast.walk(node):
+            if (
+                isinstance(child, ast.AnnAssign)
+                and isinstance(child.target, ast.Name)
+                and self._annotation_is_bool(child.annotation)
+            ):
+                bool_names.add(child.target.id)
+        return frozenset(bool_names)
+
+    def _expression_is_bool_typed(self, node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Name)
+            and bool(self._bool_names_stack)
+            and node.id in self._bool_names_stack[-1]
+        )
+
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
         # Strip docstrings
         if (node.body and isinstance(node.body[0], ast.Expr)
@@ -248,7 +280,11 @@ class Canonicalizer(ast.NodeTransformer):
                 break
         node.body = new_body
 
-        self.generic_visit(node)
+        self._bool_names_stack.append(self._function_bool_names(node))
+        try:
+            self.generic_visit(node)
+        finally:
+            self._bool_names_stack.pop()
         return node
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
@@ -287,11 +323,12 @@ class Canonicalizer(ast.NodeTransformer):
 
     def visit_Compare(self, node: ast.Compare) -> ast.AST:
         self.generic_visit(node)
-        # Boolean normalization: x == True -> x, x == False -> not x
+        # Boolean normalization is semantics-preserving only for expressions
+        # statically annotated as bool; int == True is an equality to 1.
         if (len(node.ops) == 1 and len(node.comparators) == 1):
             op = node.ops[0]
             comp = node.comparators[0]
-            if isinstance(op, ast.Eq):
+            if isinstance(op, ast.Eq) and self._expression_is_bool_typed(node.left):
                 if _is_constant(comp, True):
                     return node.left
                 if _is_constant(comp, False):
