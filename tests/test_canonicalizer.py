@@ -2,7 +2,8 @@
 import pytest
 from ast_equiv.canonicalizer import (
     parse_algorithm,
-    extract_names,
+    extract_all_names,
+    extract_free_variables,
     normalize_to_concepts,
     canonicalize,
     canonical_dump,
@@ -33,20 +34,24 @@ class TestParseAlgorithm:
 class TestExtractNames:
     def test_simple_names(self):
         tree = parse_algorithm("def f(x, y):\n    z = x + y\n    return z")
-        names = extract_names(tree)
+        names = extract_all_names(tree)
         assert "x" in names
         assert "y" in names
         assert "z" in names
 
     def test_builtins_included(self):
         tree = parse_algorithm("def f(x):\n    return len(x)")
-        names = extract_names(tree)
+        names = extract_all_names(tree)
         assert "len" in names
 
     def test_attribute_base(self):
         tree = parse_algorithm("def f(x):\n    return x.append(1)")
-        names = extract_names(tree)
+        names = extract_all_names(tree)
         assert "x" in names
+
+    def test_free_variables_exclude_builtins_and_locals(self):
+        tree = parse_algorithm("def f(x):\n    y = len(x)\n    return y + external")
+        assert extract_free_variables(tree) == {"external"}
 
 
 class TestNormalizeToConcepts:
@@ -100,8 +105,11 @@ class TestCanonicalize:
         assert dump_a == dump_b
 
     def test_true_comparison_preserved_for_non_bool_annotation(self):
+        import ast
+        from ast_equiv.comparison import _normalize_and_canonicalize
+
         body = "def f(x: int):\n    return x == True"
-        dump = canonical_dump(body, {})
+        dump = ast.dump(_normalize_and_canonicalize(body, {}), include_attributes=False)
 
         assert "Compare" in dump
         assert "Eq" in dump
@@ -120,9 +128,15 @@ class TestCanonicalize:
             "    g()\n"
             "    return use(t)"
         )
-        dump = canonical_dump(body, {"produce": "produce", "g": "g", "use": "use"})
+        import ast
+        from ast_equiv.comparison import _normalize_and_canonicalize
 
-        assert dump.index("Name(id='produce'") < dump.index("Name(id='g'")
+        tree_dump = ast.dump(
+            _normalize_and_canonicalize(body, {"produce": "produce", "g": "g", "use": "use"}),
+            include_attributes=False,
+        )
+
+        assert tree_dump.index("Name(id='produce'") < tree_dump.index("Name(id='g'")
 
 
 class TestAlphaEquivalence:

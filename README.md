@@ -1,10 +1,10 @@
 # ast-equiv
 
-Python AST equivalence comparison -- four-tier ladder.
+Python AST equivalence comparison.
 
 ## Tiers
 
-1. **Canonical AST** -- alpha-rename + normalize
-2. **Bytecode** -- compile and compare instruction sequences
-3. **Partial evaluation** -- substitute known values, then bytecode compare
-4. **Structural similarity** -- tree edit distance ratio
+- **NONE** -- no equivalence proof found
+- **CANONICAL** -- alpha-renaming and structural normalization match
+- **SYMPY** -- algebraic expression equivalence over the configured symbolic domain
+- **PARTIAL_EVAL** -- known concept values are substituted before canonical/SymPy comparison

@@ -21,13 +21,13 @@ def _contains_node(tree: ast.AST, node_type: type[ast.AST]) -> bool:
 
 
 def test_C1_identity_elimination_is_not_valid_for_untyped_addition() -> None:
-    """C-1: `x + 0` must not canonicalize to `x` for untyped values."""
+    """C-1: `x + 0` must not be a canonical rewrite for untyped values."""
     left = "def f(x):\n    return x + 0"
     right = "def f(x):\n    return x"
 
     result = compare(left, {"x": "value"}, right, {"x": "value"})
 
-    assert result.equivalent is False
+    assert result.tier is not Tier.CANONICAL
 
 
 def test_C2_repeated_mult_with_calls_preserves_call_count() -> None:

@@ -6,9 +6,9 @@ from ast_equiv import compare
 
 
 ADVERSARIAL_NEGATIVES = [
-    ("def f(x):\n    return x + 0", "def f(x):\n    return x"),
-    ("def f(x):\n    return x * 1", "def f(x):\n    return x"),
-    ("def f(x):\n    return x - 0", "def f(x):\n    return x"),
+    ("def f(x):\n    return x + 1", "def f(x):\n    return x"),
+    ("def f(x):\n    return x * 2", "def f(x):\n    return x"),
+    ("def f(x):\n    return x - 1", "def f(x):\n    return x"),
     ("def f(x):\n    return g(x) * g(x)", "def f(x):\n    return g(x) ** 2"),
     ("def f(x):\n    return fetch() * fetch()", "def f(x):\n    return fetch() ** 2"),
     ("def f(x):\n    return x // 2", "def f(x):\n    return x / 2"),

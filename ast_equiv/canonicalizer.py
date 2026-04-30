@@ -1,7 +1,10 @@
 """AST canonicalization for algorithm equivalence comparison."""
 import ast
+import hashlib
 import operator
 from typing import Any
+
+SEMANTIC_EQUIVALENCE_VERSION = "1"
 
 
 class AlgorithmParseError(Exception):
@@ -44,7 +47,7 @@ def parse_algorithm(body: str) -> ast.Module:
     return tree
 
 
-def extract_names(tree: ast.Module) -> set[str]:
+def extract_all_names(tree: ast.Module) -> set[str]:
     """Walk AST and collect all Name node ids, plus function argument names."""
     names = set()
     for node in ast.walk(tree):
@@ -53,6 +56,162 @@ def extract_names(tree: ast.Module) -> set[str]:
         elif isinstance(node, ast.arg):
             names.add(node.arg)
     return names
+
+
+class _FreeVariableCollector(ast.NodeVisitor):
+    """Collect load names not bound by Python local binding constructs."""
+
+    def __init__(self):
+        self.free: set[str] = set()
+        self._scopes: list[set[str]] = [set()]
+
+    def _is_bound(self, name: str) -> bool:
+        return any(name in scope for scope in reversed(self._scopes))
+
+    def _bind(self, name: str) -> None:
+        self._scopes[-1].add(name)
+
+    def _bind_target(self, node: ast.AST) -> None:
+        if isinstance(node, ast.Name):
+            self._bind(node.id)
+            return
+        if isinstance(node, (ast.Tuple, ast.List)):
+            for elt in node.elts:
+                self._bind_target(elt)
+            return
+        if isinstance(node, ast.Starred):
+            self._bind_target(node.value)
+
+    def _visit_target_loads(self, node: ast.AST) -> None:
+        if isinstance(node, (ast.Attribute, ast.Subscript)):
+            self.visit(node.value)
+        elif isinstance(node, (ast.Tuple, ast.List)):
+            for elt in node.elts:
+                self._visit_target_loads(elt)
+        elif isinstance(node, ast.Starred):
+            self._visit_target_loads(node.value)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._bind(node.name)
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        for default in node.args.defaults:
+            self.visit(default)
+        for default in node.args.kw_defaults:
+            if default is not None:
+                self.visit(default)
+        self._scopes.append(set())
+        self._bind_arguments(node.args)
+        for stmt in node.body:
+            self.visit(stmt)
+        self._scopes.pop()
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.visit_FunctionDef(node)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        for default in node.args.defaults:
+            self.visit(default)
+        for default in node.args.kw_defaults:
+            if default is not None:
+                self.visit(default)
+        self._scopes.append(set())
+        self._bind_arguments(node.args)
+        self.visit(node.body)
+        self._scopes.pop()
+
+    def _bind_arguments(self, args: ast.arguments) -> None:
+        for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs):
+            self._bind(arg.arg)
+        if args.vararg is not None:
+            self._bind(args.vararg.arg)
+        if args.kwarg is not None:
+            self._bind(args.kwarg.arg)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, ast.Load):
+            if node.id not in KNOWN_BUILTINS and not self._is_bound(node.id):
+                self.free.add(node.id)
+        elif isinstance(node.ctx, (ast.Store, ast.Del)):
+            self._bind(node.id)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        self.visit(node.value)
+        for target in node.targets:
+            self._visit_target_loads(target)
+            self._bind_target(target)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        if node.value is not None:
+            self.visit(node.value)
+        self.visit(node.annotation)
+        self._visit_target_loads(node.target)
+        self._bind_target(node.target)
+
+    def visit_AugAssign(self, node: ast.AugAssign) -> None:
+        self.visit(node.target)
+        self.visit(node.value)
+        self._bind_target(node.target)
+
+    def visit_For(self, node: ast.For) -> None:
+        self.visit(node.iter)
+        self._bind_target(node.target)
+        for stmt in node.body:
+            self.visit(stmt)
+        for stmt in node.orelse:
+            self.visit(stmt)
+
+    def visit_With(self, node: ast.With) -> None:
+        for item in node.items:
+            self.visit(item.context_expr)
+            if item.optional_vars is not None:
+                self._bind_target(item.optional_vars)
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_comprehension(self, node: ast.comprehension) -> None:
+        self.visit(node.iter)
+        self._bind_target(node.target)
+        for condition in node.ifs:
+            self.visit(condition)
+
+    def _visit_comprehension(
+        self,
+        elt: ast.AST,
+        generators: list[ast.comprehension],
+        extra: list[ast.AST] | None = None,
+    ) -> None:
+        self._scopes.append(set())
+        for generator in generators:
+            self.visit_comprehension(generator)
+        if extra:
+            for node in extra:
+                self.visit(node)
+        self.visit(elt)
+        self._scopes.pop()
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        self._visit_comprehension(node.elt, node.generators)
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        self._visit_comprehension(node.elt, node.generators)
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        self._visit_comprehension(node.elt, node.generators)
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        self._visit_comprehension(node.value, node.generators, [node.key])
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+        self.visit(node.value)
+        self._bind_target(node.target)
+
+
+def extract_free_variables(tree: ast.Module) -> set[str]:
+    """Return load names that are not bound locally and are not builtins."""
+    collector = _FreeVariableCollector()
+    collector.visit(tree)
+    return collector.free
 
 
 class ConceptNormalizer(ast.NodeTransformer):
@@ -224,10 +383,35 @@ def _collect_mult_power_chain(node: ast.BinOp) -> tuple[ast.AST | None, int]:
     if len(parts) < 2:
         return None, 0
     first_dump = parts[0][0]
-    if all(d == first_dump for d, _, _ in parts):
+    if all(d == first_dump for d, _, _ in parts) and _is_pure_algebraic(parts[0][2]):
         total = sum(c for _, c, _ in parts)
         return parts[0][2], total
     return None, 0
+
+
+_PURE_ALGEBRAIC_BUILTINS = frozenset({"abs", "pow"})
+
+
+def _is_pure_algebraic(node: ast.AST) -> bool:
+    if isinstance(node, (ast.Constant, ast.Name)):
+        return True
+    if isinstance(node, ast.UnaryOp):
+        return _is_pure_algebraic(node.operand)
+    if isinstance(node, ast.BinOp):
+        return _is_pure_algebraic(node.left) and _is_pure_algebraic(node.right)
+    if isinstance(node, ast.Attribute):
+        return isinstance(node.value, ast.Name) and node.value.id == "math"
+    if isinstance(node, ast.Call):
+        if node.keywords:
+            return False
+        if isinstance(node.func, ast.Attribute):
+            safe_func = isinstance(node.func.value, ast.Name) and node.func.value.id == "math"
+        elif isinstance(node.func, ast.Name):
+            safe_func = node.func.id in _PURE_ALGEBRAIC_BUILTINS
+        else:
+            safe_func = False
+        return safe_func and all(_is_pure_algebraic(arg) for arg in node.args)
+    return False
 
 
 class Canonicalizer(ast.NodeTransformer):
@@ -235,10 +419,15 @@ class Canonicalizer(ast.NodeTransformer):
 
     def __init__(self):
         self._bool_names_stack: list[frozenset[str]] = []
+        self._numeric_names_stack: list[frozenset[str]] = []
 
     @staticmethod
     def _annotation_is_bool(annotation: ast.AST | None) -> bool:
         return isinstance(annotation, ast.Name) and annotation.id == "bool"
+
+    @staticmethod
+    def _annotation_is_numeric(annotation: ast.AST | None) -> bool:
+        return isinstance(annotation, ast.Name) and annotation.id in {"int", "float"}
 
     def _function_bool_names(
         self,
@@ -258,11 +447,36 @@ class Canonicalizer(ast.NodeTransformer):
                 bool_names.add(child.target.id)
         return frozenset(bool_names)
 
+    def _function_numeric_names(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> frozenset[str]:
+        numeric_names = {
+            arg.arg
+            for arg in node.args.args
+            if self._annotation_is_numeric(arg.annotation)
+        }
+        for child in ast.walk(node):
+            if (
+                isinstance(child, ast.AnnAssign)
+                and isinstance(child.target, ast.Name)
+                and self._annotation_is_numeric(child.annotation)
+            ):
+                numeric_names.add(child.target.id)
+        return frozenset(numeric_names)
+
     def _expression_is_bool_typed(self, node: ast.AST) -> bool:
         return (
             isinstance(node, ast.Name)
             and bool(self._bool_names_stack)
             and node.id in self._bool_names_stack[-1]
+        )
+
+    def _expression_is_numeric_typed(self, node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Name)
+            and bool(self._numeric_names_stack)
+            and node.id in self._numeric_names_stack[-1]
         )
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
@@ -281,10 +495,12 @@ class Canonicalizer(ast.NodeTransformer):
         node.body = new_body
 
         self._bool_names_stack.append(self._function_bool_names(node))
+        self._numeric_names_stack.append(self._function_numeric_names(node))
         try:
             self.generic_visit(node)
         finally:
             self._bool_names_stack.pop()
+            self._numeric_names_stack.pop()
         return node
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
@@ -372,23 +588,23 @@ class Canonicalizer(ast.NodeTransformer):
         # Identity elimination: x + 0 -> x, 0 + x -> x
         op_type = type(node.op)
         if op_type is ast.Add:
-            if _is_constant_value(node.right, 0):
+            if _is_constant_value(node.right, 0) and self._expression_is_numeric_typed(node.left):
                 return node.left
-            if _is_constant_value(node.left, 0):
+            if _is_constant_value(node.left, 0) and self._expression_is_numeric_typed(node.right):
                 return node.right
         # Identity elimination: x * 1 -> x, 1 * x -> x
         elif op_type is ast.Mult:
-            if _is_constant_value(node.right, 1):
+            if _is_constant_value(node.right, 1) and self._expression_is_numeric_typed(node.left):
                 return node.left
-            if _is_constant_value(node.left, 1):
+            if _is_constant_value(node.left, 1) and self._expression_is_numeric_typed(node.right):
                 return node.right
         # Identity elimination: x - 0 -> x
         elif op_type is ast.Sub:
-            if _is_constant_value(node.right, 0):
+            if _is_constant_value(node.right, 0) and self._expression_is_numeric_typed(node.left):
                 return node.left
         # Identity elimination: x ** 1 -> x
         elif op_type is ast.Pow:
-            if _is_constant_value(node.right, 1):
+            if _is_constant_value(node.right, 1) and self._expression_is_numeric_typed(node.left):
                 return node.left
 
         # Repeated multiplication -> power: x * x * x -> x ** 3
@@ -512,7 +728,8 @@ class WhileToForNormalizer(ast.NodeTransformer):
                     and len(stmts[i].targets) == 1
                     and isinstance(stmts[i].targets[0], ast.Name)
                     and isinstance(stmts[i].value, ast.Constant)
-                    and isinstance(stmts[i].value.value, (int, float))
+                    and isinstance(stmts[i].value.value, int)
+                    and not isinstance(stmts[i].value.value, bool)
                     and isinstance(stmts[i + 1], ast.While)):
                 assign = stmts[i]
                 while_node = stmts[i + 1]
@@ -540,6 +757,10 @@ class WhileToForNormalizer(ast.NodeTransformer):
             return None
 
         bound = test.comparators[0]
+        if self._has_unsafe_control_flow(while_node.body):
+            return None
+        if self._mutates_loop_or_bound(var_name, bound, while_node.body[:-1]):
+            return None
 
         # Check last statement in body: var = var + 1 OR var += 1
         if not while_node.body:
@@ -591,6 +812,21 @@ class WhileToForNormalizer(ast.NodeTransformer):
             orelse=[],
         )
         return ast.copy_location(for_node, while_node)
+
+    @staticmethod
+    def _has_unsafe_control_flow(stmts: list[ast.stmt]) -> bool:
+        return any(isinstance(node, (ast.Break, ast.Continue)) for stmt in stmts for node in ast.walk(stmt))
+
+    @staticmethod
+    def _mutates_loop_or_bound(var_name: str, bound: ast.AST, stmts: list[ast.stmt]) -> bool:
+        protected = {var_name}
+        if isinstance(bound, ast.Name):
+            protected.add(bound.id)
+        for stmt in stmts:
+            for node in ast.walk(stmt):
+                if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)) and node.id in protected:
+                    return True
+        return False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
         self.generic_visit(node)
@@ -848,7 +1084,7 @@ def canonicalize(tree: ast.Module) -> ast.Module:
 
 
 def canonical_dump(body: str, bindings: dict[str, str]) -> str:
-    """Parse, normalize to concepts, alpha-rename, canonicalize, and dump the AST."""
+    """Parse, normalize, canonicalize, and return the versioned AST cache key."""
     tree = parse_algorithm(body)
     normalizer = ConceptNormalizer(bindings)
     tree = normalizer.visit(tree)
@@ -860,7 +1096,9 @@ def canonical_dump(body: str, bindings: dict[str, str]) -> str:
     tree = TempVariableInliner().visit(tree)
     ast.fix_missing_locations(tree)
     tree = canonicalize(tree)
-    return ast.dump(tree)
+    canonical = ast.dump(tree, include_attributes=False)
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"{SEMANTIC_EQUIVALENCE_VERSION}:{digest}"
 
 
 def structural_match(dump_a: str, dump_b: str) -> bool:

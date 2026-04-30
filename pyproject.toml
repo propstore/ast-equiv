@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "ast-equiv"
 version = "0.1.0"
-description = "Python AST equivalence comparison - four-tier ladder"
+description = "Python AST equivalence comparison"
 requires-python = ">=3.11"
 license = "MIT"
 readme = "README.md"
@@ -14,10 +14,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "hypothesis"]
+dev = ["pytest", "hypothesis", "pyright"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "property: Hypothesis-backed property tests",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["ast_equiv"]
