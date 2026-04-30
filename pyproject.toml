@@ -22,5 +22,8 @@ markers = [
     "property: Hypothesis-backed property tests",
 ]
 
+[tool.pyright]
+include = ["ast_equiv"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["ast_equiv"]

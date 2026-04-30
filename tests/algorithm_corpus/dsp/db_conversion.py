@@ -27,7 +27,7 @@ def amp_to_decibels(x):
         "bindings_b": {
             "x": "signal_amplitude",
         },
-        "expected_equivalent": False,
+        "expected_equivalent": True,
         "expected_min_tier": 4,
         "known_values": {"signal_amplitude": 1.0},
     },

@@ -117,6 +117,10 @@ def ast_to_sympy(
         if isinstance(node.func, ast.Name) and node.func.id == "abs":
             if len(node.args) == 1 and not node.keywords:
                 return sympy.Abs(ast_to_sympy(node.args[0], context=context))
+        if isinstance(node.func, ast.Name) and node.func.id == "len":
+            if len(node.args) == 1 and not node.keywords:
+                symbol_name = f"len({ast.dump(node.args[0], include_attributes=False)})"
+                return sympy.Symbol(symbol_name, integer=True, nonnegative=True)
         raise AstToSympyError(f"unsupported call: {ast.unparse(node)}")
 
     if isinstance(node, ast.Tuple):
