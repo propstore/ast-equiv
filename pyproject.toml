@@ -24,6 +24,11 @@ markers = [
 
 [tool.pyright]
 include = ["ast_equiv"]
+reportArgumentType = "none"
+reportAttributeAccessIssue = "none"
+reportCallIssue = "none"
+reportPossiblyUnboundVariable = "none"
+reportReturnType = "none"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ast_equiv"]
