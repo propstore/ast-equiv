@@ -1,7 +1,9 @@
 """AST canonicalization for algorithm equivalence comparison."""
 import ast
+import builtins
 import hashlib
 import operator
+import symtable
 from typing import Any
 
 SEMANTIC_EQUIVALENCE_VERSION = "1"
@@ -12,20 +14,7 @@ class AlgorithmParseError(Exception):
     pass
 
 
-KNOWN_BUILTINS = frozenset({
-    "len", "range", "print", "min", "max", "sum", "abs",
-    "int", "float", "str", "list", "dict", "set", "tuple",
-    "enumerate", "zip", "map", "filter", "sorted", "reversed",
-    "any", "all", "isinstance", "type", "round", "pow",
-    "bool", "bytes", "bytearray", "complex", "frozenset",
-    "hash", "hex", "id", "input", "iter", "next", "oct",
-    "open", "ord", "chr", "repr", "super", "vars",
-    "hasattr", "getattr", "setattr", "delattr",
-    "callable", "classmethod", "staticmethod", "property",
-    "ValueError", "TypeError", "KeyError", "IndexError",
-    "AttributeError", "RuntimeError", "StopIteration",
-    "Exception", "True", "False", "None",
-})
+KNOWN_BUILTINS = frozenset(vars(builtins))
 
 
 def parse_algorithm(body: str) -> ast.Module:
@@ -58,169 +47,33 @@ def extract_all_names(tree: ast.Module) -> set[str]:
     return names
 
 
-class _FreeVariableCollector(ast.NodeVisitor):
-    """Collect load names not bound by Python local binding constructs."""
-
-    def __init__(self):
-        self.free: set[str] = set()
-        self._scopes: list[set[str]] = [set()]
-
-    def _is_bound(self, name: str) -> bool:
-        return any(name in scope for scope in reversed(self._scopes))
-
-    def _bind(self, name: str) -> None:
-        self._scopes[-1].add(name)
-
-    def _bind_target(self, node: ast.AST) -> None:
-        if isinstance(node, ast.Name):
-            self._bind(node.id)
-            return
-        if isinstance(node, (ast.Tuple, ast.List)):
-            for elt in node.elts:
-                self._bind_target(elt)
-            return
-        if isinstance(node, ast.Starred):
-            self._bind_target(node.value)
-
-    def _visit_target_loads(self, node: ast.AST) -> None:
-        if isinstance(node, (ast.Attribute, ast.Subscript)):
-            self.visit(node.value)
-        elif isinstance(node, (ast.Tuple, ast.List)):
-            for elt in node.elts:
-                self._visit_target_loads(elt)
-        elif isinstance(node, ast.Starred):
-            self._visit_target_loads(node.value)
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        self._bind(node.name)
-        for decorator in node.decorator_list:
-            self.visit(decorator)
-        for default in node.args.defaults:
-            self.visit(default)
-        for default in node.args.kw_defaults:
-            if default is not None:
-                self.visit(default)
-        self._scopes.append(set())
-        self._bind_arguments(node.args)
-        for stmt in node.body:
-            self.visit(stmt)
-        self._scopes.pop()
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        self.visit_FunctionDef(node)
-
-    def visit_Lambda(self, node: ast.Lambda) -> None:
-        for default in node.args.defaults:
-            self.visit(default)
-        for default in node.args.kw_defaults:
-            if default is not None:
-                self.visit(default)
-        self._scopes.append(set())
-        self._bind_arguments(node.args)
-        self.visit(node.body)
-        self._scopes.pop()
-
-    def _bind_arguments(self, args: ast.arguments) -> None:
-        for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs):
-            self._bind(arg.arg)
-        if args.vararg is not None:
-            self._bind(args.vararg.arg)
-        if args.kwarg is not None:
-            self._bind(args.kwarg.arg)
-
-    def visit_Name(self, node: ast.Name) -> None:
-        if isinstance(node.ctx, ast.Load):
-            if node.id not in KNOWN_BUILTINS and not self._is_bound(node.id):
-                self.free.add(node.id)
-        elif isinstance(node.ctx, (ast.Store, ast.Del)):
-            self._bind(node.id)
-
-    def visit_Import(self, node: ast.Import) -> None:
-        for alias in node.names:
-            self._bind(alias.asname or alias.name.split(".", 1)[0])
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        for alias in node.names:
-            if alias.name != "*":
-                self._bind(alias.asname or alias.name)
-
-    def visit_Assign(self, node: ast.Assign) -> None:
-        self.visit(node.value)
-        for target in node.targets:
-            self._visit_target_loads(target)
-            self._bind_target(target)
-
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        if node.value is not None:
-            self.visit(node.value)
-        self.visit(node.annotation)
-        self._visit_target_loads(node.target)
-        self._bind_target(node.target)
-
-    def visit_AugAssign(self, node: ast.AugAssign) -> None:
-        self.visit(node.target)
-        self.visit(node.value)
-        self._bind_target(node.target)
-
-    def visit_For(self, node: ast.For) -> None:
-        self.visit(node.iter)
-        self._bind_target(node.target)
-        for stmt in node.body:
-            self.visit(stmt)
-        for stmt in node.orelse:
-            self.visit(stmt)
-
-    def visit_With(self, node: ast.With) -> None:
-        for item in node.items:
-            self.visit(item.context_expr)
-            if item.optional_vars is not None:
-                self._bind_target(item.optional_vars)
-        for stmt in node.body:
-            self.visit(stmt)
-
-    def visit_comprehension(self, node: ast.comprehension) -> None:
-        self.visit(node.iter)
-        self._bind_target(node.target)
-        for condition in node.ifs:
-            self.visit(condition)
-
-    def _visit_comprehension(
-        self,
-        elt: ast.AST,
-        generators: list[ast.comprehension],
-        extra: list[ast.AST] | None = None,
-    ) -> None:
-        self._scopes.append(set())
-        for generator in generators:
-            self.visit_comprehension(generator)
-        if extra:
-            for node in extra:
-                self.visit(node)
-        self.visit(elt)
-        self._scopes.pop()
-
-    def visit_ListComp(self, node: ast.ListComp) -> None:
-        self._visit_comprehension(node.elt, node.generators)
-
-    def visit_SetComp(self, node: ast.SetComp) -> None:
-        self._visit_comprehension(node.elt, node.generators)
-
-    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
-        self._visit_comprehension(node.elt, node.generators)
-
-    def visit_DictComp(self, node: ast.DictComp) -> None:
-        self._visit_comprehension(node.value, node.generators, [node.key])
-
-    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
-        self.visit(node.value)
-        self._bind_target(node.target)
 
 
 def extract_free_variables(tree: ast.Module) -> set[str]:
-    """Return load names that are not bound locally and are not builtins."""
-    collector = _FreeVariableCollector()
-    collector.visit(tree)
-    return collector.free
+    """Return external names using Python's lexical scope analysis.
+
+    Enclosing/module bindings count regardless of statement order. This is not
+    a definite-assignment or runtime reachability check. Source is never run.
+    """
+    try:
+        module = symtable.symtable(ast.unparse(tree), "<algorithm>", "exec")
+    except SyntaxError as exc:
+        raise AlgorithmParseError(f"Invalid binding syntax: {exc}") from exc
+
+    referenced_globals: set[str] = set()
+    bound_globals: set[str] = set()
+    pending = [module]
+    while pending:
+        scope = pending.pop()
+        for symbol in scope.get_symbols():
+            if scope is module or symbol.is_global():
+                name = symbol.get_name()
+                if symbol.is_referenced():
+                    referenced_globals.add(name)
+                if symbol.is_assigned() or symbol.is_imported() or symbol.is_namespace():
+                    bound_globals.add(name)
+        pending.extend(scope.get_children())
+    return referenced_globals - bound_globals - KNOWN_BUILTINS
 
 
 class ConceptNormalizer(ast.NodeTransformer):
