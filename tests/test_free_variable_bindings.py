@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ast_equiv import AlgorithmParseError, extract_free_variables, parse_algorithm
+from ast_equiv import AlgorithmParseError, compare, extract_free_variables, parse_algorithm
 
 
 @pytest.mark.parametrize(
@@ -64,3 +64,12 @@ def test_invalid_nonlocal_binding_has_a_typed_parse_error() -> None:
 
     with pytest.raises(AlgorithmParseError, match="Invalid binding syntax"):
         extract_free_variables(tree)
+
+
+def test_free_name_builtin_lookup_preserves_existing_comparison_policy() -> None:
+    result = compare(
+        "def f(object):\n    return object + 1\n", {},
+        "def f(x):\n    return x + 1\n", {},
+    )
+
+    assert result.equivalent

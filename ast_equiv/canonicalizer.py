@@ -14,7 +14,22 @@ class AlgorithmParseError(Exception):
     pass
 
 
-KNOWN_BUILTINS = frozenset(vars(builtins))
+# Existing positional-renaming policy. Free-name analysis uses Python's actual
+# builtin namespace below, without changing canonicalization behavior.
+KNOWN_BUILTINS = frozenset({
+    "len", "range", "print", "min", "max", "sum", "abs",
+    "int", "float", "str", "list", "dict", "set", "tuple",
+    "enumerate", "zip", "map", "filter", "sorted", "reversed",
+    "any", "all", "isinstance", "type", "round", "pow",
+    "bool", "bytes", "bytearray", "complex", "frozenset",
+    "hash", "hex", "id", "input", "iter", "next", "oct",
+    "open", "ord", "chr", "repr", "super", "vars",
+    "hasattr", "getattr", "setattr", "delattr",
+    "callable", "classmethod", "staticmethod", "property",
+    "ValueError", "TypeError", "KeyError", "IndexError",
+    "AttributeError", "RuntimeError", "StopIteration",
+    "Exception", "True", "False", "None",
+})
 
 
 def parse_algorithm(body: str) -> ast.Module:
@@ -73,7 +88,7 @@ def extract_free_variables(tree: ast.Module) -> set[str]:
                 if symbol.is_assigned() or symbol.is_imported() or symbol.is_namespace():
                     bound_globals.add(name)
         pending.extend(scope.get_children())
-    return referenced_globals - bound_globals - KNOWN_BUILTINS
+    return referenced_globals - bound_globals - vars(builtins).keys()
 
 
 class ConceptNormalizer(ast.NodeTransformer):

@@ -64,3 +64,12 @@ SHAs to the parent for re-review. No PR-description edits, merges, or ready acti
 - The old private collector was deleted and its only caller rewritten to the
   compiler owner. No replacement hand-written scope walker survives. The public
   extraction API and all earlier import/API/property/comparison tests remain.
+- Preservation correction: deriving the shared KNOWN_BUILTINS set changed the
+  existing positional-renaming policy. A direct probe of `f(object): object+1`
+  versus `f(x): x+1` changed CANONICAL equivalence to NONE; restoring the old set
+  in the probe restored equivalence. Added a failing comparison regression.
+  Keep that existing canonicalization policy unchanged and use `vars(builtins)`
+  directly only at the free-name query. This supersedes the earlier plan to
+  derive KNOWN_BUILTINS; no comparison behavior change belongs in this fix.
+- Final owner suite with preservation regression: 243 passed in 8.00s;
+  package pyright: 0 errors. Log `review-bindings-final-20261020-142512.log`.
