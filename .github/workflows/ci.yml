@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Python 3.13
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+      - name: Install locked dependencies and build backend
+        run: uv sync --locked --extra dev --no-install-project
+      - name: Check package typing
+        run: uv run --locked --extra dev --no-build-isolation pyright ast_equiv
+      - name: Run tests
+        run: uv run --locked --extra dev --no-build-isolation python -m pytest
+      - name: Build distributions with the locked backend
+        run: uv build --no-build-isolation --python .venv/bin/python
