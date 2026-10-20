@@ -87,8 +87,23 @@ SHAs to the parent for re-review. No PR-description edits, merges, or ready acti
   the external identifier lambda_ rather than inventing an invalid identifier.
 - Separate CI draft #5 is complete at d6d6904aa5fe39265ee2e54efb084ee832bf81e9;
   hosted run 39494960286 passed typing, 220 existing tests, and sdist/wheel builds.
-  This scope correction stays on #4; no CI-branch mutation or merge is authorized.
+  This scope correction stays on #4, separate from the CI-only change.
 - Red owner regression: 1 failed/5 passed, with genexpr incorrectly removed.
   Full green after the one-condition correction: 249 passed (7.35s), package
   typing 0 errors. Logs `namespace-label-red-20261020-145122.log` and
   `namespace-label-green-20261020-145222.log` in logs/test-runs.
+
+## Reviewed CI baseline integration
+- Parent authorized ready/merge of independently reviewed CI-only #5 at exact
+  d6d6904aa5fe39265ee2e54efb084ee832bf81e9. It merged as
+  470f0907018af5c15b95f9ae8709b3129eb5416e; source branch is preserved.
+- Post-merge push run 39497808299 completed successfully at that merge SHA.
+- Rebased this isolated branch onto that baseline. Range-diff confirms all four
+  semantic commits are unchanged. Backup algorithm-bindings-before-ci retains
+  the old a4680232b6e19c8952262501f80da7514af05332 head.
+- Locked owner checks after rebase: 249 passed (20.71s), package typing zero
+  errors, source distribution and wheel both built. One pytest cache ACL
+  warning is local to this Windows workspace.
+- Next: push for owner CI, then repin consumer #327 and rerun its checks.
+  #4 and #327 remain drafts pending
+  the parent's final semantic review; neither is authorized for merge here.
