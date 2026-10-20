@@ -135,6 +135,15 @@ class _FreeVariableCollector(ast.NodeVisitor):
         elif isinstance(node.ctx, (ast.Store, ast.Del)):
             self._bind(node.id)
 
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            self._bind(alias.asname or alias.name.split(".", 1)[0])
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        for alias in node.names:
+            if alias.name != "*":
+                self._bind(alias.asname or alias.name)
+
     def visit_Assign(self, node: ast.Assign) -> None:
         self.visit(node.value)
         for target in node.targets:

@@ -60,6 +60,49 @@ def test_RD2_extract_free_variables_respects_python_binders() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("imports", "expression"),
+    [
+        ("import math", "math.sqrt(x)"),
+        ("import math as m", "m.sqrt(x)"),
+        ("import os.path", "os.path.basename(x)"),
+        ("import os.path as path", "path.basename(x)"),
+        ("from math import sqrt", "sqrt(x)"),
+        ("from math import sqrt as root", "root(x)"),
+    ],
+)
+def test_free_variables_exclude_import_bindings(imports: str, expression: str) -> None:
+    tree = parse_algorithm(f"def f(x):\n    {imports}\n    return {expression} + external\n")
+
+    assert ast_equiv.extract_free_variables(tree) == {"external"}
+
+
+def test_import_alias_does_not_bind_original_name() -> None:
+    tree = parse_algorithm(
+        "def f(x):\n    import math as m\n    return m.sqrt(x) + math.pi\n"
+    )
+
+    assert ast_equiv.extract_free_variables(tree) == {"math"}
+
+
+def test_nested_function_import_does_not_bind_enclosing_scope() -> None:
+    tree = parse_algorithm(
+        "def f(x):\n"
+        "    def inner(y):\n"
+        "        import math\n"
+        "        return math.sqrt(y)\n"
+        "    return inner(x) + math.pi\n"
+    )
+
+    assert ast_equiv.extract_free_variables(tree) == {"math"}
+
+
+def test_module_import_binds_function_global_name() -> None:
+    tree = parse_algorithm("import math\ndef f(x):\n    return math.sqrt(x)\n")
+
+    assert ast_equiv.extract_free_variables(tree) == set()
+
+
 def test_compare_result_records_tier_failures() -> None:
     """RD-4: compare exposes typed tier failures for expected tier refusal."""
     result = compare(
