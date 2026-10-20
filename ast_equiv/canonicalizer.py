@@ -85,7 +85,8 @@ def extract_free_variables(tree: ast.Module) -> set[str]:
                 name = symbol.get_name()
                 if symbol.is_referenced():
                     referenced_globals.add(name)
-                if symbol.is_assigned() or symbol.is_imported() or symbol.is_namespace():
+                # Anonymous child-table labels also count as namespaces.
+                if symbol.is_assigned() or symbol.is_imported():
                     bound_globals.add(name)
         pending.extend(scope.get_children())
     return referenced_globals - bound_globals - vars(builtins).keys()

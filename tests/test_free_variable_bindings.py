@@ -73,3 +73,33 @@ def test_free_name_builtin_lookup_preserves_existing_comparison_policy() -> None
     )
 
     assert result.equivalent
+
+
+@pytest.mark.parametrize(
+    ("expression", "external_name"),
+    [
+        ("sum(x for x in xs)", "genexpr"),
+        ("[x for x in xs]", "listcomp"),
+        ("{x for x in xs}", "setcomp"),
+        ("{x: x for x in xs}", "dictcomp"),
+        ("(lambda x: x)", "lambda_"),
+    ],
+)
+def test_anonymous_namespace_labels_do_not_bind_external_names(
+    expression: str,
+    external_name: str,
+) -> None:
+    tree = parse_algorithm(f"def compute(xs):\n    return {expression}, {external_name}\n")
+
+    assert extract_free_variables(tree) == {external_name}
+
+
+def test_named_functions_classes_and_assigned_lambdas_still_bind() -> None:
+    tree = parse_algorithm(
+        "def helper(x):\n    return x\n"
+        "class Container:\n    pass\n"
+        "def compute(x):\n    local = lambda y: y\n"
+        "    return helper(local(x)), Container()\n"
+    )
+
+    assert extract_free_variables(tree) == set()

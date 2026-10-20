@@ -73,3 +73,22 @@ SHAs to the parent for re-review. No PR-description edits, merges, or ready acti
   derive KNOWN_BUILTINS; no comparison behavior change belongs in this fix.
 - Final owner suite with preservation regression: 243 passed in 8.00s;
   package pyright: 0 errors. Log `review-bindings-final-20261020-142512.log`.
+
+## Anonymous namespace correction
+- Reproduced the new review finding on b4efa217: a function child table named
+  genexpr makes an unrelated referenced global genexpr report namespace=True,
+  but assigned=False/imported=False. Python's __check_children only matches
+  child names, so namespace metadata is not sufficient binding evidence.
+- Smallest owner fix: remove is_namespace() from binding evidence. Named def
+  and class declarations already carry assigned=True; imports carry imported.
+- Added regressions for generator/list/set/dict comprehension labels and a
+  lambda expression, plus real named functions/classes and assigned lambdas.
+  The literal lambda label is a reserved keyword, so valid source coverage uses
+  the external identifier lambda_ rather than inventing an invalid identifier.
+- Separate CI draft #5 is complete at d6d6904aa5fe39265ee2e54efb084ee832bf81e9;
+  hosted run 39494960286 passed typing, 220 existing tests, and sdist/wheel builds.
+  This scope correction stays on #4; no CI-branch mutation or merge is authorized.
+- Red owner regression: 1 failed/5 passed, with genexpr incorrectly removed.
+  Full green after the one-condition correction: 249 passed (7.35s), package
+  typing 0 errors. Logs `namespace-label-red-20261020-145122.log` and
+  `namespace-label-green-20261020-145222.log` in logs/test-runs.
