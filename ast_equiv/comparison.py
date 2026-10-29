@@ -132,9 +132,9 @@ def _partial_eval_tree(
 
 def partial_eval_match(
     body_a: str,
-    bindings_a: dict,
+    bindings_a: dict[str, str],
     body_b: str,
-    bindings_b: dict,
+    bindings_b: dict[str, str],
     known_values: dict[str, Any] | None = None,
 ) -> bool:
     """Compare canonical ASTs after substituting known concept values."""
@@ -205,9 +205,9 @@ def structural_similarity(tree_a: ast.Module, tree_b: ast.Module) -> float:
 
 def compare(
     body_a: str,
-    bindings_a: dict,
+    bindings_a: dict[str, str],
     body_b: str,
-    bindings_b: dict,
+    bindings_b: dict[str, str],
     known_values: dict[str, Any] | None = None,
 ) -> ComparisonResult:
     """Compare two algorithms through canonical, SymPy, and partial-eval tiers."""
